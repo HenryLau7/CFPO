@@ -1,15 +1,3 @@
-# import importlib
-# from optimizers.base_new import Optimizer
-# from mutators.feedback_mutator import FeedbackMutator
-# from mutators.knowledge_mutator import KnowledgeMutator
-# from mutators.format_mutator import FormatMutator
-# from mutators.random_mutator import RandomMutator
-# from mutators.format_search_pool import SEARCH_POOL
-# import os
-# import argparse
-# from datetime import datetime
-# from utils import log_to_file
-
 import os
 import argparse
 import importlib
@@ -23,14 +11,25 @@ from mutators.format_search_pool import SEARCH_POOL
 
 # Configure logging
 def configure_logging(output_path):
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(output_path),
-            logging.StreamHandler()
-        ]
-    )
+    # Create a logger object
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
+    # Create a file handler and a stream handler
+    file_handler = logging.FileHandler(output_path)
+    stream_handler = logging.StreamHandler()
+
+    # Set the logging format
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+
+    # Add handlers to the logger
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    return logger
+
 # Helper Functions
 def get_output_marker(args):
     return f"{args.output_marker}-R_{args.rounds}-bm_size_{args.beam_size}-mb_size-v_sz_{args.valid_size}-t_sz_{args.test_size}"
@@ -66,7 +65,7 @@ def get_task_class(task_cls_name):
     except (ModuleNotFoundError, AttributeError) as e:
         raise ImportError(f"Cannot find model named {task_cls_name} in module {module_name}") from e
 
-def get_prompt(task_cls_name, all_prompt_format=False, all_query_format = False):
+def get_prompt(task_cls_name, all_prompt_format=False, all_query_format=False):
     module_name = f"init_prompts.{task_cls_name}"
     try:
         module = importlib.import_module(module_name)
@@ -109,44 +108,43 @@ def get_args():
 
     return args
 
-if __name__=="__main__":
+if __name__ == "__main__":
     args = get_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
 
     # Logging Configuration
     project_name = datetime.now().strftime("%b-%d-%H-%M-%S") + '-' + get_output_marker(args)
     output_folder = os.path.join('./result/', args.task, f'Opt_{args.opt_llm}-Eval_{args.eval_llm}', project_name)
     os.makedirs(output_folder, exist_ok=True)
     log_file_path = os.path.join(output_folder, 'output_log.txt')
-    configure_logging(log_file_path)
 
-    logging.info(f"Log file: {log_file_path}")
+    # Define the logger
+    logger = configure_logging(log_file_path)
+
+    logger.info(f"Log file: {log_file_path}")
 
     # Initialization
     prompt = get_prompt(args.task)
-    logging.info(f"Initial Prompt: {prompt}")
+    logger.info(f"Initial Prompt: {prompt}")
 
-    task = get_task_class(args.task)(data_dir = args.data_dir, train_size=args.train_size,valid_size=args.valid_size,test_size=args.test_size,minibatch_size=args.minibatch_size, answer_marker = " The answer is: ")    
-    componet_dict = get_prompt_components(args.task)
-    opt_llm = get_model_class(args.opt_llm)(max_tokens = 4096)
+    task = get_task_class(args.task)(data_dir=args.data_dir, train_size=args.train_size, valid_size=args.valid_size, test_size=args.test_size, minibatch_size=args.minibatch_size, answer_marker=" The answer is: ")
+    component_dict = get_prompt_components(args.task)
+    opt_llm = get_model_class(args.opt_llm)(max_tokens=4096)
 
+    eval_llm = get_model_class(args.eval_llm)(model_path=args.vllm_pth, max_tokens=4096, stop=None, repetition_penalty=1.0)
 
-    eval_llm = get_model_class(args.eval_llm)(model_path = args.vllm_pth, max_tokens=max_tokens, stop=stop, repetition_penalty=1.0)
-
-    if args.task in ['MMLU','MultipleChoice']:
+    if args.task in ['MMLU', 'MultipleChoice']:
         search_pool = SEARCH_POOL['MultiChoice']
-    elif args.task in ['GSM8K','MATH']:
+    elif args.task in ['GSM8K', 'MATH']:
         search_pool = SEARCH_POOL['QA']
     elif args.task in ['BBH']:
-        search_pool = SEARCH_POOL['Classfication']
+        search_pool = SEARCH_POOL['Classification']
 
     from prompts.base import PromptHistory
-    prompt_history = PromptHistory(init_prompt=prompt,init_round=0)
+    prompt_history = PromptHistory(init_prompt=prompt, init_round=0)
 
-
- # Mutators
+    # Mutators
     case_diagnosis = CaseDiagnosis(
         mutation_llm=opt_llm,
         task=task,
@@ -171,24 +169,26 @@ if __name__=="__main__":
         COMPONENT_KEYS=['PROMPT_FORMAT', 'QUERY_FORMAT'],
         prompt_history=prompt_history,
         search_pool=search_pool,
+        logger=logger,
     )
 
     num_prompts_per_round = {"case_diagnosis": args.num_feedbacks, "monte_carlo_sampling": args.num_random, "format": args.num_format}
 
-    optimizer=Optimizer(
+    optimizer = Optimizer(
         task=task,
-        mutator_list=[case_diagnosis, monte_carlo_sampling,format_mutator],
+        mutator_list=[case_diagnosis, monte_carlo_sampling, format_mutator],
         cur_round=0,
-        total_round = args.rounds,
-        num_prompt_return = args.num_return,
+        total_round=args.rounds,
+        num_prompt_return=args.num_return,
         num_prompts_per_round=num_prompts_per_round,
-        output_path=output_path,
+        output_path=output_folder,
         opt_controller=args.controller,
         beam_size=args.beam_size,
         eval_llm=eval_llm,
-        COMPONENT_KEYS=componet_dict['all'],
+        COMPONENT_KEYS=component_dict['all'],
         init_temperature=args.init_temperature,
         prompt_history=prompt_history,
-        )    
-        
-    result = optimizer.run(init_prompt = prompt, project_name = project_name)
+        logger=logger,
+    )
+
+    result = optimizer.run(init_prompt=prompt, project_name=project_name)
