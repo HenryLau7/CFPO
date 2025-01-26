@@ -346,7 +346,7 @@ def guided_visual_outline_extractor(component_text: str) -> str:
     return cleaned_content
 
 
-generated_prompt_format_pool = [
+generated_prompt_renderer_pool = [
     (concise_bullet_points_renderer, concise_bullet_points_extractor),
     (structured_summary_renderer, structured_summary_extractor),
     (interactive_dialogue_renderer, interactive_dialogue_extractor),

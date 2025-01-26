@@ -4,3 +4,4 @@ from .classification import classification_query_format_pool
 
 from .generated_format_QA import generated_query_format_pool as generated_query_format_pool_QA
 from .generated_format_MultiChoices import generated_query_format_pool as generated_query_format_pool_MultiChoice
+

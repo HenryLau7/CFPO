@@ -65,7 +65,8 @@ def get_task_class(task_cls_name):
     except (ModuleNotFoundError, AttributeError) as e:
         raise ImportError(f"Cannot find model named {task_cls_name} in module {module_name}") from e
 
-def get_prompt(task_cls_name, all_prompt_format=False, all_query_format=False):
+
+def get_prompt(task_cls_name):
     module_name = f"init_prompts.{task_cls_name}"
     try:
         module = importlib.import_module(module_name)

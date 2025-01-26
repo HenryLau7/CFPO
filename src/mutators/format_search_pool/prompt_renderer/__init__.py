@@ -7,7 +7,7 @@ from .plain import *
 from .direct_joint import *
 from .generated_format import *
 
-prompt_format_pool = [
+prompt_renderer_pool = [
     (direct_joint_renderer, direct_joint_extractor),
     (markdown_renderer, markdown_extractor),
     (plain_renderer, plain_extractor),
