@@ -1,4 +1,5 @@
 import re
+from typing import List, Dict, Tuple, Optional
 
 def parse_tagged_text(text: str, start_tag: str, end_tag: str, logger=None) -> List[str]:
     """Parse text that is tagged with start and end tags."""

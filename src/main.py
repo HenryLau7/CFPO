@@ -3,7 +3,8 @@ import argparse
 import importlib
 from datetime import datetime
 import logging
-from optimizers.base_new import Optimizer
+from optimizer import Optimizer
+from prompt import PromptHistory
 from mutators.case_diagnosis import CaseDiagnosis
 from mutators.monte_carlo_sampling import MonteCarloSampling
 from mutators.format_mutator import FormatMutator
@@ -70,12 +71,7 @@ def get_prompt(task_cls_name):
     module_name = f"init_prompts.{task_cls_name}"
     try:
         module = importlib.import_module(module_name)
-        if all_prompt_format:
-            prompt = module.prompt_format_prompts
-        elif all_query_format:
-            prompt = module.query_format_prompts
-        else:
-            prompt = module.prompt
+        prompt = module.prompt
     except (ModuleNotFoundError, AttributeError) as e:
         raise ImportError(f"Cannot find prompt named {task_cls_name} in module {module_name}") from e
     return prompt
@@ -132,7 +128,6 @@ if __name__ == "__main__":
     task = get_task_class(args.task)(data_dir=args.data_dir, train_size=args.train_size, valid_size=args.valid_size, test_size=args.test_size, minibatch_size=args.minibatch_size, answer_marker=" The answer is: ")
     component_dict = get_prompt_components(args.task)
     opt_llm = get_model_class(args.opt_llm)(max_tokens=4096)
-
     eval_llm = get_model_class(args.eval_llm)(model_path=args.vllm_pth, max_tokens=4096, stop=None, repetition_penalty=1.0)
 
     if args.task in ['MMLU', 'MultipleChoice']:
@@ -142,8 +137,8 @@ if __name__ == "__main__":
     elif args.task in ['BBH']:
         search_pool = SEARCH_POOL['Classification']
 
-    from prompts.base import PromptHistory
-    prompt_history = PromptHistory(init_prompt=prompt, init_round=0)
+    prompt_history_path = '/mnt/teamdrive/yuanye/PromptHistory/'
+    prompt_history = PromptHistory(init_prompt=prompt, root_path=prompt_history_path, init_round=0)
 
     # Mutators
     case_diagnosis = CaseDiagnosis(
