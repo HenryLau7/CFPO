@@ -1,9 +1,8 @@
-from vllm import LLM, SamplingParams
 from .base import LLM_Model
+from vllm import LLM, SamplingParams
 from typing import List, Union, Optional
 import os
 import logging
-
 
 class VllmModel(LLM_Model):
     def __init__(
@@ -11,7 +10,7 @@ class VllmModel(LLM_Model):
         model_path: Optional[str] = None,
         max_tokens: int = 256,
         stop: str = '',
-        repetition_penalty: float = 1.2,
+        repetition_penalty: float = 1.0,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -28,7 +27,6 @@ class VllmModel(LLM_Model):
 
         # Initialize the VLLM model
         self.llm = LLM(model=model_path)
-
         self.max_tokens = max_tokens
         self.stop = stop
         self.repetition_penalty = repetition_penalty
@@ -56,16 +54,15 @@ class VllmModel(LLM_Model):
 
         # Configure sampling parameters
         sampling_params = SamplingParams(
-            temperature=0,  # Disable sampling for deterministic output
+            temperature=0, 
             repetition_penalty=self.repetition_penalty,
-            top_p=0.1,  # Nucleus sampling
+            top_p=0.1,
             max_tokens=self.max_tokens,
             stop=self.stop,
         )
         
-        # Handle batch inference
         if use_batch_acceleration and isinstance(prompt, list):
-            batch_size = 512  # Adjust batch size as needed
+            batch_size = 512
             gen_output_list = []
 
             for start_idx in range(0, len(prompt), batch_size):
@@ -76,12 +73,10 @@ class VllmModel(LLM_Model):
 
             return [item.outputs[0].text for item in gen_output_list]
 
-        # Handle single prompt inference
         elif not use_batch_acceleration and isinstance(prompt, str):
             output = self.llm.generate(prompt, sampling_params, use_tqdm=False)
             return output[0].outputs[0].text
 
-        else:
-            raise ValueError(
-                "Invalid input: `prompt` must be a list if `use_batch_acceleration` is True, or a string if False."
-            )
+if __name__ == "__main__":
+    llm = VllmModel("/home/aiscuser/Phi-3-mini-4k-instruct", max_tokens=512, stop='\n\n', repetition_penalty=1.0)
+    print(llm.inference("Hello, how are you?",  use_batch_acceleration=False))

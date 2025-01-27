@@ -5,6 +5,8 @@ from typing import List, Dict, Tuple, Optional
 from .base import BaseTask
 from liquid import Template
 import logging
+import random
+
 
 class MultipleChoiceTask(BaseTask):
     def __init__(
@@ -14,13 +16,15 @@ class MultipleChoiceTask(BaseTask):
         minibatch_size: int,
         valid_size: int,
         test_size: int,
-        answer_marker: Optional[str] = None,
+        answer_marker: Optional[str] = '',
         logger: Optional[logging.Logger] = None,
     ):
         super().__init__(data_dir, train_size, minibatch_size, valid_size, test_size, answer_marker, logger)
         self.task_intention = "solve a multiple choice task"
         self.num_to_letter = {"1": "A", "2": "B", "3": "C", "4": "D", "5": "E"}
         self.letter_to_num = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
+        self.dataset = self.load_task_dataset(data_dir)
+        self.train_set, self.valid_set, self.test_set = self.dataset
 
     def load_task_dataset(self, data_dir: str) -> Tuple[List[Dict], List[Dict], List[Dict]]:
         """Load and split the dataset into train, validation, and test sets."""

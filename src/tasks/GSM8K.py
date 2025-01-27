@@ -24,6 +24,9 @@ class GSM8KTask(BaseTask):
         """
         super().__init__(data_dir, train_size, minibatch_size, valid_size, test_size, answer_marker, logger)
         self.task_intention = "solve a reasoning task and answer the following mathematical problem"
+        self.dataset = self.load_task_dataset(data_dir)
+        self.train_set, self.valid_set, self.test_set = self.dataset
+
 
     def load_task_dataset(self, data_dir: str) -> Tuple[List[Dict], List[Dict], List[Dict]]:
         """

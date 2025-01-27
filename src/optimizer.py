@@ -58,10 +58,17 @@ class Optimizer:
             self.round = round
             round_start_time = time.time()
             self._log_round_start(round, prompts)
+
+            # ### Test format mutator
+            # self.prompt_history.beam_history[-1] = prompts
+            # prompts = self.format_mutator(prompts, self.num_prompts_per_round['format'], self.round)
+            # break
+            # ### Test format mutator
+            
             if round == 0:
                 self._evaluate_initial_round(prompts)
             else:
-                self._process_round(prompts)
+                prompts = self._process_round(prompts)
 
             self._evaluate_test_set(prompts, round)
             self._log_round_end(round, round_start_time)
@@ -91,6 +98,7 @@ class Optimizer:
             prompts = self._expand_and_score_diagnosis_variation(prompts)
 
         self._update_prompt_history(prompts)
+        return prompts
 
     def _expand_and_score_diagnosis_variation(self, prompts: List) -> List:
         """Expand and score prompts using feedback and random mutators."""
@@ -109,7 +117,7 @@ class Optimizer:
         """Expand and score prompts using format mutator."""
         self.logger.info(f"\n================ In Round {self.round}. Start Expand Candidates by Format Mutator================")
         start_time = time.time()
-        prompts = self.expand_candidates_format(prompts, select_method='Random')
+        prompts = self.expand_candidates_format(prompts)
         self.logger.info(f'\n ROUND {self.round} FORMAT EXPAND TIME: {convert_seconds((time.time() - start_time))}\n')
 
         self.logger.info(f"\n================ In Round {self.round}. Start Score {len(prompts)} Candidates and Beam Search ================")
@@ -120,7 +128,7 @@ class Optimizer:
 
     def _update_format_pool(self):
         """Update the format pool."""
-        self.logger.info(f"\n================ In Round {self.round}. Start Update Knowledge Pool ================")
+        self.logger.info(f"\n================ In Round {self.round}. Start Update Format Pool ================")
         self.format_mutator.update_format_pool(self.round)
         self.prompt_history.format_pool[self.round] = deepcopy(self.format_mutator.format_pool)
         self.logger.info(f"\n================ Format pool ================\n{stringify_dict(self.format_mutator.format_pool)}")
@@ -129,7 +137,7 @@ class Optimizer:
         self.logger.info(f"\n================ In Round {self.round}. Start Update Prompt History ================")
         self.prompt_history.beam_history[self.round] = prompts
         self.prompt_history.round = self.round
-        # self.prompt_history.save(path=self.project_name)
+        self.prompt_history.save(path=self.project_name)
 
     def _evaluate_test_set(self, prompts: List, round: int):
         """Evaluate prompts on the test set."""
@@ -208,11 +216,11 @@ class Optimizer:
 
         return new_prompts, minibatch
 
-    def expand_candidates_format(self, prompts: List, method: str = 'Random') -> List:
+    def expand_candidates_format(self, prompts: List) -> List:
         """Expand prompts using the format mutator."""
         if self.num_prompts_per_round['format'] > 0:
             self.logger.info(f"\n--------- Curr Round: {self.round}, Curr prompts length: {len(prompts)} to expand\n")
-            return self.format_mutator(prompts, self.num_prompts_per_round['format'], self.round, method=method)
+            return self.format_mutator(prompts, self.num_prompts_per_round['format'], self.round)
         return [[prompt] for prompt in prompts]
 
     def score_candidates(self, prompts: List) -> Tuple[List, List]:

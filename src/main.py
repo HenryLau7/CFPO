@@ -98,8 +98,8 @@ def get_args():
     parser.add_argument('--correct_per_feedback', default=1, type=int)
     parser.add_argument('--apply_per_feedback', default=1, type=int, help='Number of improved results per feedback during applying')
     parser.add_argument('--num_random', default=1, type=int)
-    parser.add_argument('--num_knowledge', default=0, type=int)
     parser.add_argument('--num_format', default=1, type=int)
+    parser.add_argument('--select_method', default='UCT', type=str)
     parser.add_argument('--gpu_id', default='0', type=str)
     args = parser.parse_args()
 
@@ -164,6 +164,7 @@ if __name__ == "__main__":
         COMPONENT_KEYS=['PROMPT_RENDERER', 'QUERY_FORMAT'],
         prompt_history=prompt_history,
         search_pool=search_pool,
+        select_method = args.select_method,
         logger=logger,
     )
 

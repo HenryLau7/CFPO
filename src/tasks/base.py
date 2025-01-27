@@ -25,7 +25,7 @@ class BaseTask:
         self.test_size = test_size
         self.logger = logger if logger else logging.getLogger(__name__)
 
-        self.dataset = self.load_task_dataset(data_dir)
+        self.dataset = None, None, None
         self.train_set, self.valid_set, self.test_set = self.dataset
 
     def isolate_answer(self, text: str, answer_marker: str) -> Optional[str]:

@@ -103,7 +103,7 @@ class Prompt:
         else:
             return query_renderer(question=example["question"], answer=example["answer"], cot_hinter=self.cot_hinter)
        
-    def render_query(self, question: str) -> str:
+    def render_query(self, question: str, **kwargs) -> str:
         """
         Renders a query into a string.
 
@@ -116,6 +116,7 @@ class Prompt:
         query_renderer = self.query_format[0]
 
         if self.task in ['MultipleChoice']:
+            choices = kwargs['choices']
             return query_renderer(question = question, choices = choices, cot_hinter=self.cot_hinter, answer = '')
         else:
             return query_renderer(question=question, cot_hinter=self.cot_hinter, answer='')
