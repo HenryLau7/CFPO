@@ -1,11 +1,10 @@
 from .base import BaseMutator
 from utils import parse_tagged_text, stringify_dict
+import re
 import math
 import random
 import inspect
 from typing import Optional, Tuple, Callable, Dict, Any, List
-
-import re
 
 class FormatMutator(BaseMutator):
     def __init__(
@@ -15,6 +14,7 @@ class FormatMutator(BaseMutator):
         COMPONENT_KEYS: List[str],  # ['PROMPT_RENDERER', 'QUERY_FORMAT']
         prompt_history,
         search_pool: Dict,  # A dict: search_pool['prompt'], search_pool['query']
+        select_method: str,
         logger=None,
     ):
         super().__init__(mutation_llm, task, COMPONENT_KEYS)
@@ -24,6 +24,7 @@ class FormatMutator(BaseMutator):
         self.format_pool = {'PROMPT_RENDERER': None, 'QUERY_FORMAT': None}
         self.search_pool = search_pool
         self.logger = logger
+        self.select_method = select_method
         self._init_format_pool()
 
     def _init_format_pool(self):
@@ -37,7 +38,7 @@ class FormatMutator(BaseMutator):
             for fn in self.search_pool["query"]
         }
 
-    def __call__(self, prompts: List, num_select_formats: int, round: int, select_method: str = 'UCT') -> List:
+    def __call__(self, prompts: List, num_select_formats: int, round: int) -> List:
         """Generate new prompts by mutating formats."""
         self.round = round
 
@@ -50,7 +51,7 @@ class FormatMutator(BaseMutator):
             return new_prompts
         else:
             generated_prompt_renderer, generated_query_format = self.generate_new_format()
-            selected_prompt_renderers, selected_query_formats = self.format_select(num_select_formats, round, select_method)
+            selected_prompt_renderers, selected_query_formats = self.format_select(num_select_formats, round)
 
             prompt_renderers = [generated_prompt_renderer] + selected_prompt_renderers
             query_formats = [generated_query_format] + selected_query_formats
@@ -96,8 +97,8 @@ class FormatMutator(BaseMutator):
             try:
                 new_prompt = prompt.generate(
                     round=round,
-                    component_key=[format_type],
-                    component_content=[format_func],
+                    component_keys=[format_type],
+                    component_contents=[format_func],
                     action_desc=action_desc,
                 )
                 new_prompt.render_all()
@@ -152,6 +153,7 @@ class FormatMutator(BaseMutator):
                 self.logger.error(f"Error executing generated code: {e}")
                 return None
 
+            import pdb;pdb.set_trace()
             renderer_func = namespace[f"{name}_renderer"]
             extractor_func = namespace[f"{name}_extractor"]
 
@@ -180,10 +182,10 @@ class FormatMutator(BaseMutator):
 
         return (generated_prompt_renderer, generated_query_format)
 
-    def format_select(self, num_prompt: int, round: int, method: str = 'UCT') -> Tuple[List, List]:
+    def format_select(self, num_prompt: int, round: int) -> Tuple[List, List]:
         """Apply knowledge-based formats."""
 
-        if method == "UCT":
+        if self.select_method == "UCT":
             new_prompt_renderers = sorted(
                 self.format_pool["PROMPT_RENDERER"],
                 key=lambda k: self.format_pool["PROMPT_RENDERER"][k]['uct_score'],
@@ -198,9 +200,11 @@ class FormatMutator(BaseMutator):
             new_prompt_renderers = [(k, v) for (k, v) in  self.search_pool['prompt'] if k in new_prompt_renderers]
             new_query_formats = [(k, v) for (k, v) in self.search_pool['query'] if k in new_query_formats]
 
-        elif method == "Random":
+        elif self.select_method == "Random":
             new_prompt_renderers = random.sample(self.search_pool['prompt'], num_prompt)
             new_query_formats = random.sample(self.search_pool['query'], num_prompt)
+        else:
+            raise NotImplementedError
 
         self.logger.info(f"Selected formats:\nPrompt renderers: {new_prompt_renderers}\nQuery formats: {new_query_formats}")
         return (new_prompt_renderers, new_query_formats)
@@ -266,14 +270,13 @@ class FormatMutator(BaseMutator):
 
         prompt_to_generate_format = '\n'.join([line.lstrip() for line in prompt_to_generate_format.split('\n')])
         response = self.mutation_llm.inference(prompt_to_generate_format, desc="generate prompt format", temperature=1)
-        self.logger.info(f"\n### Prompt to generate prompt renderer: {prompt_to_generate_format}")
+        # self.logger.info(f"\n### Prompt to generate prompt renderer: {prompt_to_generate_format}")
 
         new_formats = self._parse_format(parse_tagged_text(response, "<START>", "<END>"))
 
         if len(new_formats) == 0:
             return None
         return new_formats[0]
-
 
     def _generate_prompt_renderer_code(self, new_format, search_pool, format_desc, temperature):
         """
@@ -308,7 +311,7 @@ class FormatMutator(BaseMutator):
         Here is a example rendered by a new format:
         {rendered_example}
 
-        Please generate the code for this provided example based on the new PROMPT_RENDERER. Ensure that both the renderer and extractor functions are included. The generated code should be plain Python code without any Markdown syntax or language identifiers such as ```python or '''python. Please output the code directly without any additional formatting.
+        Please generate the code for this provided example based on the new PROMPT_RENDERER. Ensure that both the renderer and extractor functions are included. The generated code should be plain Python code without any Markdown syntax or language identifiers such as ```python or '''python. Please output the code directly without any additional formatting. Note that the name of the functions must be completely SAME with the name of format, i.e. [Format name]_renderer and [Format_name]_extractor.
         Please encapsulate the using the following format:
         
         <START>
@@ -323,7 +326,7 @@ class FormatMutator(BaseMutator):
 
         prompt_to_generate_code = '\n'.join([line.lstrip() for line in prompt_to_generate_code.split('\n')])
         response = self.mutation_llm.inference(prompt_to_generate_code, desc="generate prompt format code", temperature=temperature)
-        self.logger.info(f"\n### Prompt to generate prompt renderer code: {prompt_to_generate_code}")
+        # self.logger.info(f"\n### Prompt to generate prompt renderer code: {prompt_to_generate_code}")
 
         new_formats = self._parse_format_code(parse_tagged_text(response, "<START>", "<END>"))
         if len(new_formats) == 0:
@@ -342,19 +345,43 @@ class FormatMutator(BaseMutator):
             format_fn_desc.append((key.__name__[:-9], content))
         format_fn_desc_string = "\n".join([f"{name}: {desc}" for name,desc in format_fn_desc])
 
+        if self.task.__class__.__name__ in ['GSM8KTask', 'MATHTask']:
+            example = {
+                "question": "There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are done, there will be 21 trees. How many trees did the grove workers plant today?",
+                "answer": "There are 15 trees originally. Then there were 21 trees after some more were planted. So there must have been 21 - 15 = 6. The answer is: 6."
+            }
+            format_name_exs = ['QA', 'IR']
+            task_specific_instruction = "Ensure the format is suitable for mathematical problem-solving and includes clear instructions for step-by-step reasoning."
+            rendered_example_1 = self.search_pool['query'][1][0](example["question"], example["answer"], self.prompt_history.beam_history[self.round-1][0].cot_hinter)
+            rendered_example_2 = self.search_pool['query'][2][0](example["question"], example["answer"], self.prompt_history.beam_history[self.round-1][0].cot_hinter)
+
+        elif self.task.__class__.__name__ in ['MultipleChoiceTask']:
+            example = {
+                "question": "Statement 1 | Every element of a group generates a cyclic subgroup of the group. Statement 2 | The symmetric group S_10 has 10 elements.",
+                "choices": ["True, True",
+                            "False, False",
+                            "True, False",
+                            "False, True"],
+                "answer": "A cyclic group is a group that is generated by a single element. Hence a subgroup generated by a single element of a group is cyclic and Statement 1 is True. The answer is (C)."
+            }
+            format_name_exs = ['Plain', 'Markdown']
+            task_specific_instruction = "Ensure the format is clear, structured, and aligned with commonly used query formats."
+            rendered_example_1 = self.search_pool['query'][0][0](example["question"], example['choices'], example["answer"], self.prompt_history.beam_history[self.round-1][0].cot_hinter).strip()
+            rendered_example_2 = self.search_pool['query'][1][0](example["question"], example['choices'], example["answer"], self.prompt_history.beam_history[self.round-1][0].cot_hinter).strip()
+
         prompt_to_generate_code = f"""{self._get_meta_prompt_header()}
 
         We have some preset QUERY_FORMAT candidates, here are our whole search pool:
         {format_fn_desc_string}
 
         Here are two code implementations from our QUERY_FORMAT candidates as for your reference:
-        <Format name: QA_0_space>
+        <Format name: {format_name_exs[0]}>
         <Renderer code>
         {inspect.getsource(search_pool[0][0])}
         <Extractor code>
         {inspect.getsource(search_pool[0][1])}
 
-        <Format name: IR>
+        <Format name: {format_name_exs[1]}>
         <Renderer code>
         {inspect.getsource(search_pool[3][0])}
         <Extractor code>
@@ -381,7 +408,7 @@ class FormatMutator(BaseMutator):
         response = self.mutation_llm.inference(prompt_to_generate_code, desc="generate query format code", temperature=temperature)
 
         new_formats = self._parse_format_code(parse_tagged_text(response, "<START>", "<END>"))
-        self.logger.info(f"\n### Prompt to generate query format code: {prompt_to_generate_code}")
+        # self.logger.info(f"\n### Prompt to generate query format code: {prompt_to_generate_code}")
 
         if len(new_formats) == 0:
             return None
@@ -408,10 +435,10 @@ class FormatMutator(BaseMutator):
                             "False, True"],
                 "answer": "A cyclic group is a group that is generated by a single element. Hence a subgroup generated by a single element of a group is cyclic and Statement 1 is True. The answer is (C)."
             }
-            format_name = ['Plain', 'Markdown']
+            format_name = ['plain', 'markdown']
             task_specific_instruction = "Ensure the format is clear, structured, and aligned with commonly used query formats."
-            rendered_example_1 = search_pool[0][0](example["question"], example['choices'], example["answer"], prompt.cot_hinter).strip()
-            rendered_example_2 = search_pool[1][0](example["question"], example['choices'], example["answer"], prompt.cot_hinter).strip()
+            rendered_example_1 = self.search_pool['query'][0][0](example["question"], example['choices'], example["answer"], self.prompt_history.beam_history[self.round-1][0].cot_hinter).strip()
+            rendered_example_2 = self.search_pool['query'][1][0](example["question"], example['choices'], example["answer"], self.prompt_history.beam_history[self.round-1][0].cot_hinter).strip()
 
         format_fn_desc = []
         for key, content in self.search_pool['query_desc'].items():
@@ -457,7 +484,7 @@ class FormatMutator(BaseMutator):
 
         prompt_to_generate_format = '\n'.join([line.lstrip() for line in prompt_to_generate_format.split('\n')])
         response = self.mutation_llm.inference(prompt_to_generate_format, desc="generate query format", temperature=1)
-        self.logger.info(f"\n### Prompt to generate query format: {prompt_to_generate_format}")
+        # self.logger.info(f"\n### Prompt to generate query format: {prompt_to_generate_format}")
 
         new_formats = self._parse_format(parse_tagged_text(response, "<START>", "<END>"))
 
@@ -508,7 +535,10 @@ class FormatMutator(BaseMutator):
                 pass
         return outputs
    
-    def _parse_format_code(self, texts, format_code_pattern=r"<Format name: (.*?)>\n<Description: (.*?)>\n<Renderer code>\n(.*?)\n<Extractor code>\n(.*?)$"):
+    def _parse_format_code(
+        self, 
+        texts, 
+        format_code_pattern=r"<Format name:\s*(.*?)>\s*<Description:\s*(.*?)>\s*<Renderer code>\s*(.*?)\s*<Extractor code>\s*(.*?)$"):
         """ Parse text that is tagged with start and end tags."""
         outputs = []
         for t in texts:
