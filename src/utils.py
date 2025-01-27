@@ -45,7 +45,7 @@ def get_component_desc(component_name):
         'EXAMPLE_HINTER': "Offers a brief hint indicating that examples will follow, such as, 'Here are some examples:', 'To illustrate how to approach these problems, consider the following examples:'.",
         'EXAMPLES': "Presents specific instances or scenarios pertinent to the task, including inputs, expected outputs, and correct responses.",
         'COT_HINTER': "Provides a concise sentence to encourage the generation that incorporate a chain of thought or reasoning process, such as 'Let's think step by step'.",
-        'PROMPT_FORMAT': "Defines how to aggregate all components into a structured prompt.",
+        'PROMPT_RENDERER': "Defines how to aggregate all components into a structured prompt.",
         'QUERY_FORMAT': "Defines how to structure the rendering of examples and queries.",
     }
     if component_name in component_desc_map or component_name.upper() in component_desc_map:

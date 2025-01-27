@@ -53,18 +53,17 @@ class CaseDiagnosis(BaseMutator):
 
             new_prompt = prompt.generate(
                 round=round,
-                component_key=component_key_list,
-                component_content=content_list,
+                component_keys=component_key_list,
+                component_contents=content_list,
                 action_desc="case_diagnosis",
-                reason=feedbacks,
             )
 
-        try:
-            if str(new_prompt):
-                new_prompts.append(new_prompt)
-        except Exception as e:
-            self.logger.error(f"Failed to render new_prompt: {e}")
-            continue
+            try:
+                if str(new_prompt):
+                    new_prompts.append(new_prompt)
+            except Exception as e:
+                self.logger.error(f"Failed to render new_prompt: {e}")
+                continue
 
             # Log results
             self.logger.info(f"\n================ In Round {round} Get a new prompt via feedbacks ================")
@@ -130,7 +129,7 @@ class CaseDiagnosis(BaseMutator):
         self.logger.info(feedback_prompt)
 
         res = self.mutation_llm.inference(feedback_prompt, desc="Get feedbacks", temperature=temperature)
-        feedback = self._parse_component(parse_tagged_text(res, "<START>", "<END>"), logger=self.logger)
+        feedback = self._parse_component(parse_tagged_text(res, "<START>", "<END>", logger=self.logger))
 
         if len(feedback) > num_component:
             feedback = feedback[:num_component]
@@ -157,12 +156,12 @@ class CaseDiagnosis(BaseMutator):
         self.logger.info(prompt_to_apply_feedback)
 
         response = self.mutation_llm.inference(prompt_to_apply_feedback, desc="Apply feedbacks", temperature=temperature)
-        new_prompt_components =parse_tagged_text(res, "<START>", "<END>", logger=self.logger)
+        new_prompt_components =parse_tagged_text(response, "<START>", "<END>", logger=self.logger)
 
         if new_prompt_components == [None]:
             return None
 
-        return prompt.prompt_format[1](new_prompt_components[0])
+        return prompt.prompt_renderer[1](new_prompt_components[0])
 
     def apply_feedbacks_for_examples(self, prompt, feedback_str: str, apply_per_feedback: int, temperature: float) -> Optional[str]:
         """Apply feedback to the EXAMPLES segment of the prompt."""
@@ -186,8 +185,8 @@ class CaseDiagnosis(BaseMutator):
         self.logger.info("\n================ Prompts to apply feedbacks for examples ================\n")
         self.logger.info(prompt_to_apply_feedback)
 
-        res = self.mutation_llm.inference(prompt_to_apply_feedback, desc="Apply feedbacks for examples", temperature=temperature)
-        new_prompt_components = parse_tagged_text(res, "<START>", "<END>",logger = self.logger)
+        response = self.mutation_llm.inference(prompt_to_apply_feedback, desc="Apply feedbacks for examples", temperature=temperature)
+        new_prompt_components = parse_tagged_text(response, "<START>", "<END>",logger = self.logger)
 
         if new_prompt_components == [None]:
             return None

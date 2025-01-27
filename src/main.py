@@ -39,7 +39,7 @@ def get_prompt_components(task_name):
     component_dict = {
         'case_diagnosis': ['TASK_INSTRUCTION', 'TASK_DETAIL', 'OUTPUT_FORMAT', 'EXAMPLES'],
         'monte_carlo_sampling': ['TASK_INSTRUCTION', 'TASK_DETAIL', 'OUTPUT_FORMAT', 'EXAMPLE_HINTER', 'EXAMPLES'],
-        'all': ['TASK_INSTRUCTION', 'TASK_DETAIL', 'OUTPUT_FORMAT', 'EXAMPLE_HINTER', 'EXAMPLES', 'PROMPT_FORMAT', 'QUERY_FORMAT']
+        'all': ['TASK_INSTRUCTION', 'TASK_DETAIL', 'OUTPUT_FORMAT', 'EXAMPLE_HINTER', 'EXAMPLES', 'PROMPT_RENDERER', 'QUERY_FORMAT']
     }
 
     if task_name in ['GSM8K', 'MATH']:
@@ -128,9 +128,9 @@ if __name__ == "__main__":
     task = get_task_class(args.task)(data_dir=args.data_dir, train_size=args.train_size, valid_size=args.valid_size, test_size=args.test_size, minibatch_size=args.minibatch_size, answer_marker=" The answer is: ")
     component_dict = get_prompt_components(args.task)
     opt_llm = get_model_class(args.opt_llm)(max_tokens=4096)
-    eval_llm = get_model_class(args.eval_llm)(model_path=args.vllm_pth, max_tokens=4096, stop=None, repetition_penalty=1.0)
+    eval_llm = get_model_class(args.eval_llm)(model_path=args.vllm_pth, max_tokens=256, stop='\n', repetition_penalty=1.0)
 
-    if args.task in ['MMLU', 'MultipleChoice']:
+    if args.task in ['MultipleChoice']:
         search_pool = SEARCH_POOL['MultiChoice']
     elif args.task in ['GSM8K', 'MATH']:
         search_pool = SEARCH_POOL['QA']
@@ -143,11 +143,11 @@ if __name__ == "__main__":
     # Mutators
     case_diagnosis = CaseDiagnosis(
         mutation_llm=opt_llm,
+        eval_llm=eval_llm,
         task=task,
         num_error_per_feedback=args.errors_per_feedback,
         num_correct_per_feedback=args.correct_per_feedback,
         COMPONENT_KEYS=component_dict['case_diagnosis'],
-        eval_llm=eval_llm,
         logger=logger,
     )
 
@@ -155,14 +155,13 @@ if __name__ == "__main__":
         mutation_llm=opt_llm,
         task=task,
         COMPONENT_KEYS=component_dict['monte_carlo_sampling'],
-        search_pool=search_pool,
         logger=logger,
     )
 
     format_mutator = FormatMutator(
         mutation_llm=opt_llm,
         task=task,
-        COMPONENT_KEYS=['PROMPT_FORMAT', 'QUERY_FORMAT'],
+        COMPONENT_KEYS=['PROMPT_RENDERER', 'QUERY_FORMAT'],
         prompt_history=prompt_history,
         search_pool=search_pool,
         logger=logger,
@@ -185,6 +184,7 @@ if __name__ == "__main__":
         init_temperature=args.init_temperature,
         prompt_history=prompt_history,
         logger=logger,
+        project_name = project_name
     )
 
-    result = optimizer.run(init_prompt=prompt, project_name=project_name)
+    result = optimizer.run(init_prompt=prompt)

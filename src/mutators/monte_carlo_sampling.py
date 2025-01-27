@@ -10,11 +10,9 @@ class MonteCarloSampling(BaseMutator):
         mutation_llm,
         task,
         COMPONENT_KEYS: List[str],
-        search_pool: dict,  # A dict: search_pool['prompt'], search_pool['query']
         logger=None,
     ):
         super().__init__(mutation_llm, task, COMPONENT_KEYS)
-        self.search_pool = search_pool
         self.logger = logger
 
     def __call__(self, prompt, num_prompt: int, num_component: int, round: int, temperature: float) -> List:
@@ -37,10 +35,6 @@ class MonteCarloSampling(BaseMutator):
             for component_key in selected_component_keys:
                 if component_key == "EXAMPLES":
                     content = self._generate_synonyms_for_examples(prompt, temperature=temperature)
-                elif component_key == "PROMPT_FORMAT":
-                    content = self.random_choose_format(self.search_pool['prompt'], current_format=prompt.prompt_format)
-                elif component_key == "QUERY_FORMAT":
-                    content = self.random_choose_format(self.search_pool['query'], current_format=prompt.query_format)
                 else:
                     content = self._generate_synonyms(prompt, component_key, temperature=temperature)
 
@@ -49,10 +43,9 @@ class MonteCarloSampling(BaseMutator):
 
             new_prompt = prompt.generate(
                 round=round,
-                component_key=component_key_list,
-                component_content=content_list,
+                component_keys=component_key_list,
+                component_contents=content_list,
                 action_desc="random",
-                reason=None,
             )
 
             try:
@@ -72,13 +65,6 @@ class MonteCarloSampling(BaseMutator):
 
         return new_prompts
 
-    def random_choose_format(self, search_pool: List[Tuple], current_format: Tuple) -> Tuple:
-        """Randomly choose a format from the search pool, ensuring it's different from the current format."""
-        while True:
-            _format = random.choice(search_pool)
-            if _format != current_format:
-                return _format  # Tuple: (renderer, extractor)
-
     def _generate_synonyms(self, prompt, component_name: str, temperature: float) -> str:
         """Generate synonyms for a specific component of the prompt."""
         prompt_to_generate_synonyms = f"""{self._get_meta_prompt_header(prompt)}
@@ -91,7 +77,7 @@ class MonteCarloSampling(BaseMutator):
         prompt_to_generate_synonyms = '\n'.join([line.lstrip() for line in prompt_to_generate_synonyms.split('\n')])
         new_prompt_component = self.mutation_llm.inference(prompt_to_generate_synonyms, desc=f"get variation for {component_name}", temperature=temperature)
         new_prompt_component = re.sub(r'^[\n"\' ]+|[\n"\' ]+$', '', new_prompt_component)
-        return prompt.prompt_format[1](new_prompt_component)
+        return prompt.prompt_renderer[1](new_prompt_component)
 
     def _generate_synonyms_for_examples(self, prompt, temperature: float) -> str:
         """Generate synonyms for the EXAMPLES section of the prompt."""

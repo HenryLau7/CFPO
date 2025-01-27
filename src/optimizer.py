@@ -21,6 +21,7 @@ class Optimizer:
         init_temperature: float = 1,
         prompt_history=None,
         logger=None,
+        project_name=None,
     ):
         self.opt_controller = self._init_controller(opt_controller)
         self.case_diagnosis, self.monte_carlo_sampling, self.format_mutator = mutator_list
@@ -36,6 +37,8 @@ class Optimizer:
         self.init_temperature = init_temperature
         self.prompt_history = prompt_history
         self.logger = logger
+        self.COMPONENT_KEYS = COMPONENT_KEYS
+        self.project_name = project_name
 
     def _init_controller(self, opt_controller: Optional[str]) -> "Controller":
         class Controller:
@@ -47,22 +50,20 @@ class Optimizer:
 
         return Controller(opt_controller) if opt_controller else None
 
-    def run(self, init_prompt, project_name: str) -> List:
+    def run(self, init_prompt) -> List:
         prompts = [init_prompt] if not isinstance(init_prompt, list) else init_prompt
         start_time = time.time()
 
         for round in range(self.cur_round, self.total_round + 1):
             self.round = round
             round_start_time = time.time()
-
             self._log_round_start(round, prompts)
-
             if round == 0:
                 self._evaluate_initial_round(prompts)
             else:
                 self._process_round(prompts)
 
-            self._evaluate_test_set(prompts, round, project_name)
+            self._evaluate_test_set(prompts, round)
             self._log_round_end(round, round_start_time)
 
         self._log_final_time(start_time)
@@ -108,7 +109,7 @@ class Optimizer:
         """Expand and score prompts using format mutator."""
         self.logger.info(f"\n================ In Round {self.round}. Start Expand Candidates by Format Mutator================")
         start_time = time.time()
-        prompts = self.expand_candidates_format(prompts, method='Random')
+        prompts = self.expand_candidates_format(prompts, select_method='Random')
         self.logger.info(f'\n ROUND {self.round} FORMAT EXPAND TIME: {convert_seconds((time.time() - start_time))}\n')
 
         self.logger.info(f"\n================ In Round {self.round}. Start Score {len(prompts)} Candidates and Beam Search ================")
@@ -122,25 +123,25 @@ class Optimizer:
         self.logger.info(f"\n================ In Round {self.round}. Start Update Knowledge Pool ================")
         self.format_mutator.update_format_pool(self.round)
         self.prompt_history.format_pool[self.round] = deepcopy(self.format_mutator.format_pool)
-        self.logger.info(f"\n================ Knowledge pool ================\n{stringify_dict(self.format_mutator.knowledge_pool)}")
+        self.logger.info(f"\n================ Format pool ================\n{stringify_dict(self.format_mutator.format_pool)}")
 
     def _update_prompt_history(self, prompts: List):
         self.logger.info(f"\n================ In Round {self.round}. Start Update Prompt History ================")
         self.prompt_history.beam_history[self.round] = prompts
         self.prompt_history.round = self.round
-        self.prompt_history.save(path=project_name)
+        # self.prompt_history.save(path=self.project_name)
 
-    def _evaluate_test_set(self, prompts: List, round: int, project_name: str):
+    def _evaluate_test_set(self, prompts: List, round: int):
         """Evaluate prompts on the test set."""
         self.logger.info(f"\n================ In Round {self.round}. Start Evaluation on test set ================")
         start_time = time.time()
 
         for rank, prompt in enumerate(prompts):
-            self._log_and_evaluate_prompt(prompt, rank, round, project_name)
+            self._log_and_evaluate_prompt(prompt, rank, round)
 
         self.logger.info(f'\n ROUND {round} EVALUATION TIME: {convert_seconds((time.time() - start_time))}\n')
 
-    def _log_and_evaluate_prompt(self, prompt, rank: int, round: int, project_name: str):
+    def _log_and_evaluate_prompt(self, prompt, rank: int, round: int):
         """Log and evaluate a single prompt."""
         self.logger.info(f"\n================ Round {round} Rank {rank} Candidate ================\n\n{prompt}")
         if prompt.test_score is None:
@@ -150,9 +151,9 @@ class Optimizer:
             test_score = prompt.test_score
 
         self.logger.info(f'Evaluate Score: {prompt.eval_score}, Test Score: {test_score}')
-        self._log_to_wandb(prompt, rank, round, project_name)
+        self._log_to_wandb(prompt, rank, round)
 
-    def _log_to_wandb(self, prompt, rank: int, round: int, project_name: str):
+    def _log_to_wandb(self, prompt, rank: int, round: int):
         """Log prompt details to WandB."""
         wandb_log = {
             "round": round,
@@ -166,7 +167,7 @@ class Optimizer:
             "whole_prompt": str(prompt),
         }
 
-        for attribute in COMPONENT_KEYS:
+        for attribute in self.COMPONENT_KEYS:
             if 'FORMAT' in attribute and attribute != 'OUTPUT_FORMAT':
                 wandb_log[attribute] = [getattr(prompt, attribute.lower())[0].__name__, getattr(prompt, attribute.lower())[1].__name__]
             elif attribute == 'EXAMPLES':
@@ -175,7 +176,7 @@ class Optimizer:
             else:
                 wandb_log[attribute] = getattr(prompt, attribute.lower())
 
-        run = wandb.init(project=project_name, name=f'Round_{round}-Rank{rank}', reinit=True, config=wandb_log, id=f'Round_{round}-Rank{rank}')
+        run = wandb.init(project=self.project_name, name=f'Round_{round}-Rank{rank}', reinit=True, config=wandb_log, id=f'Round_{round}-Rank{rank}')
         run.finish()
 
     def _log_round_end(self, round: int, round_start_time: float):

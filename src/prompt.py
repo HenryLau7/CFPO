@@ -160,6 +160,7 @@ class Prompt:
         """
         child_prompt = Prompt(
             round=round,
+            task=self.task,
             query_part=self.query_part,
             task_instruction=self.task_instruction,
             task_detail=self.task_detail,
@@ -205,7 +206,7 @@ class PromptHistory:
         self.root_path = root_path
         self.root = init_prompt
         self.round = init_round
-        self.knowledge_pool = {}
+        self.format_pool = {}
         self.beam_history = {}
 
     def save(self, path: str) -> None:
@@ -281,4 +282,4 @@ if __name__ == "__main__":
         query_renderer_fn=lambda question, answer, cot_hinter: f"Q: {question}\nA: {answer}",
         query_extract_fn=lambda x: x
     )
-    import pdb;pdb.set_trace()
+    print(str(prompt))
