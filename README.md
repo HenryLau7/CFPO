@@ -5,13 +5,8 @@ Welcome! This library provides the official implementation of our paper: Beyond 
 
 ## Usage
 
-
-For multimodal groupwise registration, taking the BrainWeb data (`./core/data/BrainWeb/test.zip`) as an example, you could run `./core/trainers/Brainweb/BrainWebGroupRegTrainer.py` by the following code:
-
 ```shell
-# Script to run GSM8K
-
-current_time=$(date +"%Y%m%d%H%M%S")
+# Script to run
 
 python src/main.py \
        --task #TASK NAME #\
