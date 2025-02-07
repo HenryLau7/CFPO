@@ -88,5 +88,13 @@ Key arguments:
 If you find the code useful, please cite our paper as follows:
 
 ```bibtex
-NOT AVAILABLE
+@misc{liu2025cfpo,
+      title={Beyond Prompt Content: Enhancing LLM Performance via Content-Format Integrated Prompt Optimization}, 
+      author={Yuanye Liu and Jiahang Xu and Li Lyna Zhang and Qi Chen and Xuan Feng and Yang Chen and Zhongxin Guo and Yuqing Yang and Cheng Peng},
+      year={2025},
+      eprint={2502.04295},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2502.04295}, 
+}
 ```
